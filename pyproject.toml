@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "api-doc-sync"
+version = "0.1.0"
+description = "Automated API documentation synchronization for GitHub pull requests"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0.2,<7.0.0",
+]
+
+[project.scripts]
+api-doc-sync = "api_doc_sync.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["api_doc_sync*"]

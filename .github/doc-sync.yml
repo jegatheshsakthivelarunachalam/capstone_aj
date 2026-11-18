@@ -1,0 +1,17 @@
+startup_command: "python tests/integration/mock_app.py --port 8000 --mode success"
+openapi_url: "http://127.0.0.1:8000/openapi.json"
+output_path: "docs/api.md"
+health_check_url: "http://127.0.0.1:8000/health"
+shell: "pwsh"
+
+auth:
+  mode: "none"
+  secret_names: {}
+
+environment_overrides:
+  startup_command: "DOC_SYNC_STARTUP_COMMAND"
+  openapi_url: "DOC_SYNC_OPENAPI_URL"
+  output_path: "DOC_SYNC_OUTPUT_PATH"
+  health_check_url: "DOC_SYNC_HEALTH_CHECK_URL"
+  shell: "DOC_SYNC_SHELL"
+  auth_mode: "DOC_SYNC_AUTH_MODE"
