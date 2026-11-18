@@ -28,13 +28,13 @@ authentication abstractions.
 
 ```mermaid
 flowchart LR
-    PR[Pull Request] --> WF[GitHub Actions Workflow]
+    PR[Pull Request] --> WF[GitHub Actions Pull Request Workflow]
 
-    subgraph Untrusted Build
+    subgraph ReadOnlyBuild[Read-only Build Job]
         WF --> CFG[Configuration Loader]
         CFG --> LIFE[Application Lifecycle]
         LIFE --> APP[Local Application]
-        APP --> OAS[Unauthenticated OpenAPI Endpoint]
+        APP --> OAS[Configured OpenAPI Endpoint]
         OAS --> FETCH[OpenAPI Fetcher]
         FETCH --> VAL[Validator and Extractor]
         VAL --> REF[Local $ref Resolver]
@@ -45,10 +45,11 @@ flowchart LR
         CAND --> DRIFT
     end
 
-    DRIFT --> DIFF[Unified Diff and Summary]
+    DRIFT --> DIFF[Sanitized Unified Diff and Summary]
     DIFF --> ART[GitHub Artifact]
-    DIFF -. available permissions only .-> COMMENT[Conditional PR Comment]
-    DRIFT --> CHECK[PR Check Result]
+    DIFF -. sanitized summary only .-> REPORT[Conditional Reporting Job]
+    REPORT --> COMMENT[Conditional PR Comment]
+    DIFF --> CHECK[PR Check Result]
 ```
 
 GitHub Actions is the workflow coordinator. Python components perform process
@@ -73,6 +74,11 @@ The workflow uses the `pull_request` event, never `pull_request_target`.
 The PR build job is read-only at the repository boundary. It should set
 `contents: read` and not use elevated write permissions. Application startup
 must be treated as execution of untrusted pull-request code.
+
+Reporting is isolated in a separate job or final reporting stage. The reporting
+stage receives only a sanitized summary and artifact path. It does not receive
+repository secrets, OIDC credentials, the raw OpenAPI document, authorization
+headers, or the PR-controlled startup process environment.
 
 ### 4.2 Secrets
 
@@ -101,8 +107,8 @@ The workflow must therefore:
 - never include endpoint payloads, raw specs, authorization values, or startup
   command output in comments.
 
-A reporting step may receive only the sanitized summary and artifact URL. It
-must not receive repository secrets or raw OpenAPI response content.
+A Reporting may receive only the sanitized summary and artifact URL. It must not
+receive repository secrets or raw OpenAPI response content.
 
 ## 5. Component design
 
@@ -167,6 +173,13 @@ Readiness:
 3. stop after the approved 5-minute startup timeout;
 4. always terminate the process and clean temporary resources.
 
+Cleanup must terminate the complete process tree, not only the shell process
+that launched it. On Windows, this may require a process job or explicit
+process-tree termination. Cleanup is exception-safe and runs after startup
+failures, readiness failures, fetch failures, and successful checks. Cleanup
+tests must cover ordinary exit, timeout, and an application that spawns a
+child process.
+
 The application process is unprivileged and receives no elevated PR write
 permission. It may receive only the declared non-secret environment needed by
 the application.
@@ -184,20 +197,29 @@ The fetcher:
 - makes four total requests: one initial request and three retries;
 - waits one fixed second between attempts;
 - accepts JSON and YAML OpenAPI responses;
-- rejects documents larger than 10 MB;
-- supports an unauthenticated endpoint in the initial implementation.
+- streams response data with a cumulative limit of 10 MB plus one byte;
+- rejects a response when the limit is exceeded before JSON/YAML parsing;
+- supports no-auth, Bearer, Basic, API-key, and OAuth2 client credentials.
 
-Enterprise authentication support is required by the approved requirements,
-but the provider-specific implementation remains a separate gated boundary:
+Authentication support is implemented through one small authentication
+adapter with explicit modes:
 
-- Bearer;
-- Basic;
-- API key;
-- OAuth2/OIDC.
+- `none`: no authorization header;
+- `bearer`: configured Bearer token;
+- `basic`: configured username and password;
+- `api_key`: configured header name and value;
+- `oauth2_client_credentials`: token endpoint, client identity, and scope,
+  obtained from trusted repository secrets or OIDC only.
 
-No default enterprise adapter is necessary for the local unauthenticated
-capstone. If implemented later, credential values must come from a trusted
-job context and must not reach PR code or process arguments.
+The standard secret-name mapping is stored in `.github/doc-sync.yml`.
+Credential values are stored only in runner secret/environment context, never
+in PR-controlled startup commands or command-line arguments. OAuth2/OIDC
+provider-specific values must be explicitly configured; the architecture does
+not invent a token endpoint or audience.
+
+For fork pull requests, no repository credential is available. If the selected
+authentication mode requires a secret, the workflow fails with a sanitized
+configuration/authentication error instead of running an anonymous fallback.
 
 ### 5.5 OpenAPI validator and extractor
 
@@ -252,6 +274,17 @@ supported facts and missing-fact counts. It is used for:
 No separate JSON repository artifact is required or proposed. `docs/api.md`
 remains the only documentation output file.
 
+The Markdown document embeds deterministic HTML-comment metadata for the
+canonical fact model. The metadata is generated from the same canonical model
+as visible Markdown and contains the model/schema version plus stable
+machine-readable API facts needed for inverse parsing. It must not contain
+credentials, raw response bodies, or unredacted secret-like values.
+
+The baseline parser and candidate renderer use the same canonical model and
+metadata parser. That shared implementation prevents Markdown formatting and
+whitespace from affecting semantic drift and prevents renderer/parser
+divergence.
+
 The model is illustrative:
 
 ```json
@@ -291,9 +324,17 @@ The drift engine:
 - distinguishes changed facts from missing facts;
 - produces a unified diff and summary counts.
 
-Missing `docs/api.md` is an explicit failure because an approved baseline is
-required. Missing fields within the baseline are compared according to the
-same canonical fact representation.
+Before canonical serialization, Markdown generation, unified-diff generation,
+temp artifacts, logs, and PR reporting, redaction is applied consistently.
+Candidate and baseline text may contain secret-like descriptions or schema
+values; these values must be redacted before they reach any diff or report
+artifact.
+
+Missing `docs/api.md` is an explicit validation failure because an approved
+baseline is required. The workflow emits a sanitized failure summary and, if
+candidate generation completes successfully, creates a full replacement patch.
+Missing fields within an existing baseline are compared according to the same
+canonical fact representation.
 
 ### 5.10 GitHub reporting
 
@@ -327,7 +368,25 @@ do not introduce a database or external service.
 Enterprise SDK or framework authentication libraries are not required for the
 initial implementation.
 
-## 7. Runner selection
+## 7. Package and source boundaries
+
+Existing Technical Profile code remains in `src/doc_sync_capstone/` and is not
+deleted or replaced.
+
+The API synchronization implementation will use a separate
+`src/api_doc_sync/` package:
+
+- `config.py`;
+- `lifecycle.py`;
+- `openapi.py`;
+- `markdown.py`;
+- `drift.py`;
+- `github_report.py`.
+
+The existing Technical Profile and new API synchronization entry points retain
+separate responsibilities and output models.
+
+## 8. Runner selection
 
 The approved requirements specify `windows-latest` in FR-5 and the NFR CI
 section.
@@ -343,7 +402,7 @@ NFR CI runner requirement.
 The existing unit-test workflow uses `ubuntu-latest` as a Python test matrix,
 but that workflow does not establish the API synchronization runner.
 
-## 8. Pull-request data flow
+## 9. Pull-request data flow
 
 ```mermaid
 sequenceDiagram
@@ -397,7 +456,7 @@ API changes become documentation through this flow:
 8. Drift produces a failing check and patch artifact.
 9. The developer manually applies the suggested patch.
 
-## 9. Error handling
+## 10. Error handling
 
 | Failure | Response | Result |
 |---|---|---|
@@ -420,7 +479,12 @@ API changes become documentation through this flow:
 | PR comment denied | Skip comment and retain artifact/check | Pass/fail based on drift |
 | Unexpected generation/write failure | Sanitized error and nonzero result | Fail |
 
-## 10. Reproducibility and temp-file safety
+Logs emit sanitized stage identifiers and meaningful error codes for
+`startup`, `readiness`, `fetch`, `parse`, `extract`, `generate`, `drift`,
+`artifact`, and `report`. Raw process output, OpenAPI response bodies,
+authorization headers, and credential values are not included.
+
+## 11. Reproducibility and temp-file safety
 
 - Use a unique temp directory per workflow run.
 - Store candidate Markdown, normalized facts, bounded logs, and unified diff
@@ -431,7 +495,7 @@ API changes become documentation through this flow:
 - Ensure identical input/configuration produces identical candidate Markdown.
 - Do not include timestamps or runner-specific values in generated Markdown.
 
-## 11. Testing architecture
+## 12. Testing architecture
 
 ### 11.1 Mandatory unit tests
 
@@ -474,7 +538,7 @@ The workflow smoke test verifies:
 
 Integration and semantic-drift tests are optional unless separately approved.
 
-## 12. Requirement traceability
+## 13. Requirement traceability
 
 | Requirement | Architecture component | Trace evidence |
 |---|---|---|
@@ -487,8 +551,8 @@ Integration and semantic-drift tests are optional unless separately approved.
 | FR-7 | OpenAPI fetcher | Absolute URL only |
 | FR-8 | OpenAPI validator | JSON and YAML |
 | FR-9 | OpenAPI validator | OpenAPI 3.0/3.1 |
-| FR-10 | OpenAPI fetcher authentication boundary | No-auth baseline; four auth modes remain a gated requirement |
-| FR-11 | Trusted reporting/config boundary | Secrets/OIDC not exposed to PR code |
+| FR-10 | OpenAPI fetcher authentication adapter | no-auth, Bearer, Basic, API key, and OAuth2 modes |
+| FR-11 | Trusted secret/config boundary | Secret names mapped in config; values from secrets/OIDC; never in PR code |
 | FR-12 | OpenAPI fetcher | 180 seconds, four attempts, fixed 1-second delay |
 | FR-13 | Extractor and Markdown generator | Four approved field groups |
 | FR-14 | Extractor and renderer | `Not Found` |
@@ -505,7 +569,7 @@ Integration and semantic-drift tests are optional unless separately approved.
 | FR-25 | Artifact upload | 5-day retention |
 | FR-26 | GitHub workflow permissions | Read-only build and conditional reporting |
 
-## 13. Numeric limit verification
+## 14. Numeric limit verification
 
 | Limit | Source | Handling |
 |---|---|---|
@@ -523,7 +587,7 @@ Integration and semantic-drift tests are optional unless separately approved.
 
 No proposed engineering default adds a mandatory limit.
 
-## 14. Output verification
+## 15. Output verification
 
 The approved repository output is `docs/api.md`. The architecture adds no
 committed JSON artifact, additional Markdown document, or Confluence publish
@@ -533,15 +597,15 @@ The unified diff is a workflow artifact rather than a repository file. The
 workflow may upload a patch and create a conditional PR comment. It never
 commits candidate documentation.
 
-## 15. Unresolved requirements and boundaries
+## 16. Unresolved requirements and boundaries
 
 1. **Fork PR authentication:** Fork PRs cannot receive repository secrets.
    Authenticated OpenAPI access therefore cannot be guaranteed for fork PRs.
-   The initial implementation uses an unauthenticated local endpoint.
-2. **Bearer/Basic/API-key/OAuth2 support:** FR-10/FR-11 remain requirements,
-   but exact provider and token acquisition behavior is not defined. The
-   architecture exposes one future auth boundary and does not invent provider
-   details.
+   The workflow fails explicitly when an authenticated mode has no credential.
+2. **OAuth2/OIDC provider details:** FR-10/FR-11 are implemented as a
+   configurable auth boundary. Repository-specific token endpoint, audience,
+   subject/identity, and secret mapping values must still be supplied without
+   placing credentials in PR-controlled code or `.github/doc-sync.yml`.
 3. **Runner conflict:** requirements.md explicitly selects `windows-latest`.
    `ubuntu-latest` is recommended for simplicity only as a future requirements
    clarification; it is not substituted now.
