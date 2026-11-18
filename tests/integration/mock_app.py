@@ -24,9 +24,43 @@ class MockApplication:
                             "200": {"description": "OK"}
                         }
                     }
+                },
+                "/patients": {
+                    "get": {
+                        "summary": "List patients",
+                        "responses": {
+                            "200": {
+                                "description": "Patient list",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Patient"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
+            "components": {
+                "schemas": {
+                    "Patient": {
+                        "type": "object",
+                        "properties": {
+                            "patient_id": {"type": "integer"},
+                            "first_name": {"type": "string"},
+                            "email": {"type": "string"},
+                            "phone": {"type": "string"}
+                        }
+                    }
+                }
+            }
         }
+
         self.mode = mode
         self.server: ThreadingHTTPServer | None = None
         self.thread: threading.Thread | None = None
@@ -40,6 +74,7 @@ class MockApplication:
                 if owner.mode == "slow" and self.path == "/health":
                     owner._send(self, 503, {"status": "starting"})
                     return
+
                 if owner.mode == "oversized" and self.path == "/openapi.json":
                     owner._send_bytes(
                         self,
@@ -48,6 +83,7 @@ class MockApplication:
                         "application/json",
                     )
                     return
+
                 if owner.mode == "malformed" and self.path == "/openapi.json":
                     owner._send_bytes(
                         self,
@@ -56,6 +92,7 @@ class MockApplication:
                         "application/json",
                     )
                     return
+
                 if self.path in {"/health", "/openapi.json"}:
                     content = (
                         owner.openapi_document
@@ -64,12 +101,17 @@ class MockApplication:
                     )
                     owner._send(self, 200, content)
                     return
+
                 owner._send(self, 404, {"error": "Not Found"})
 
         self.handler = Handler
 
     @staticmethod
-    def _send(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]) -> None:
+    def _send(
+        handler: BaseHTTPRequestHandler,
+        status: int,
+        payload: dict[str, Any],
+    ) -> None:
         body = json.dumps(payload, sort_keys=True).encode("utf-8")
         MockApplication._send_bytes(
             handler,
@@ -107,6 +149,7 @@ class MockApplication:
             self.server.shutdown()
             self.server.server_close()
             self.server = None
+
         if self.thread is not None:
             self.thread.join(timeout=2)
             self.thread = None
@@ -125,7 +168,9 @@ def start_mock_application(
 def main() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the test-only API OpenAPI fixture.")
+    parser = argparse.ArgumentParser(
+        description="Run the test-only API OpenAPI fixture."
+    )
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument(
         "--mode",
@@ -135,17 +180,22 @@ def main() -> int:
     args = parser.parse_args()
 
     application = MockApplication(mode=args.mode)
-    application.server = ThreadingHTTPServer(("127.0.0.1", args.port), application.handler)
+    application.server = ThreadingHTTPServer(
+        ("127.0.0.1", args.port),
+        application.handler,
+    )
     thread = threading.Thread(
         target=application.server.serve_forever,
         name="api-doc-sync-mock",
         daemon=False,
     )
     thread.start()
+
     try:
         thread.join()
     except KeyboardInterrupt:
         application.stop()
+
     return 0
 
 

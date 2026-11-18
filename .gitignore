@@ -1,2 +1,8 @@
+@'
 __pycache__/
 *.py[cod]
+
+# Generated documentation sync artifacts
+/build/
+*.egg-info/
+'@ | Set-Content -Path .gitignore

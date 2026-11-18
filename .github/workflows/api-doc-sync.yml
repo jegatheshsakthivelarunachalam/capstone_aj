@@ -11,6 +11,7 @@ on:
       - "package.json"
       - "pom.xml"
       - "requirements.txt"
+      - "tests/integration/mock_app.py"
 
 permissions:
   contents: read
@@ -156,20 +157,29 @@ jobs:
             }
 
             const marker = "<!-- api-doc-sync-drift -->";
+
+            const statusTitle = reportInvalid
+            ? "## API documentation check failed"
+            : report.missing_baseline
+            ? "## API documentation baseline missing"
+            : report.has_drift
+            ? "## API documentation drift detected"
+            : "## API documentation is up to date";
+
             const body = [
-              marker,
-              "## API documentation drift detected",
-              `- Changed fact groups: ${report.changed_facts.length}`,
-              `- Paths: ${report.path_count}`,
-              `- Schemas: ${report.schema_count}`,
-              `- Missing facts: ${report.missing_facts.length}`,
-              `[Workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
+            marker,
+            statusTitle,
+            `- Changed fact groups: ${report.changed_facts.length}`,
+            `- Paths: ${report.path_count}`,
+            `- Schemas: ${report.schema_count}`,
+            `- Missing facts: ${report.missing_facts.length}`,
+            `[Workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
             ];
             if (artifactUrl) {
-              body.push(`[Suggested patch](${artifactUrl})`);
+            body.push(`[Suggested patch](${artifactUrl})`);
             }
-            const bodyText = body.join("\n");
 
+            const bodyText = body.join("\n");
             const issue_number = context.issue.number;
             const comments = await github.paginate(
               github.rest.issues.listComments,
