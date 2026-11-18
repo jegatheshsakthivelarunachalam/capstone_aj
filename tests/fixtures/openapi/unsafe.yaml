@@ -1,0 +1,2 @@
+openapi: 3.1.0
+paths: !!python/object/apply:os.system ["echo unsafe"]

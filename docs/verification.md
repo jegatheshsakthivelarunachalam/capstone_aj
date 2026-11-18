@@ -1,43 +1,45 @@
 # Verification Evidence
 
-## Automated tests
+## Automated test suite
 
-Command run from the project root using the configured Python 3.14.3
-interpreter:
-
-```powershell
-& 'C:\Users\JegatheshsakthivelAr\AppData\Local\Python\bin\python.exe' -m unittest discover -s tests -v
-```
-
-Result: **26 tests passed** (`Ran 26 tests ... OK`).
-
-Pylance diagnostics were checked for `src/doc_sync_capstone` and `tests`:
-**No errors found.**
-
-The GitHub Actions run triggered by the feature-branch push completed
-successfully on both matrix jobs:
-
-- Python 3.10: [job 134756040072](https://github.com/jegatheshsakthivelarunachalam/capstone_aj/actions/runs/44291049256/job/134756040072)
-- Python 3.14: [job 134756040804](https://github.com/jegatheshsakthivelarunachalam/capstone_aj/actions/runs/44291049256/job/134756040804)
-
-## End-to-end repository check
-
-Command run against the user-supplied public repository:
+Run from the project root:
 
 ```powershell
-python -m src.doc_sync_capstone https://github.com/jegatheshsakthivelarunachalam/capstone_aj --output docs\technical-profile.md --force
+python -m unittest discover -s tests -v
+python -m compileall -q src tests
+git diff --check
 ```
 
-Result: exit status `0`; the Markdown profile was generated. Observed facts:
+The suite covers T01–T17 unit, security, workflow, mock-application, and
+end-to-end behavior.
 
-- Repository: `jegatheshsakthivelarunachalam/capstone_aj`
-- Description: `This repository is created to facilitate capstone project`
-- Default branch: `main`
-- Languages: `Not Found` (GitHub language endpoint returned no languages)
-- README summary: `This repository is created to facilitate capstone project`
-- Supported dependency/runtime manifests: `Not Found` (no supported manifest is tracked)
+Actual final fresh-terminal result: **145 tests passed**.
+The final remediation-focused suite passed: **47 tests**.
 
-The generated output is [technical-profile.md](./technical-profile.md).
+## Compilation
+
+```powershell
+python -m compileall -q src tests
+```
+
+Result: **passed**.
+
+## YAML validation
+
+```powershell
+python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/api-doc-sync.yml').read_text(encoding='utf-8')); yaml.safe_load(pathlib.Path('.github/doc-sync.yml').read_text(encoding='utf-8')); print('workflow/config YAML: valid')"
+```
+
+Result: **workflow/config YAML: valid**.
+
+## Diff and protected-file checks
+
+```powershell
+git diff --check
+```
+
+Result: **passed**. `src/doc_sync_capstone/` and the approved requirements,
+architecture, design-review, and implementation-plan documents were unchanged.
 
 ## Not run
 
