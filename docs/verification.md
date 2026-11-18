@@ -14,6 +14,12 @@ Result: **26 tests passed** (`Ran 26 tests ... OK`).
 Pylance diagnostics were checked for `src/doc_sync_capstone` and `tests`:
 **No errors found.**
 
+The GitHub Actions run triggered by the feature-branch push completed
+successfully on both matrix jobs:
+
+- Python 3.10: [job 134756040072](https://github.com/jegatheshsakthivelarunachalam/capstone_aj/actions/runs/44291049256/job/134756040072)
+- Python 3.14: [job 134756040804](https://github.com/jegatheshsakthivelarunachalam/capstone_aj/actions/runs/44291049256/job/134756040804)
+
 ## End-to-end repository check
 
 Command run against the user-supplied public repository:
@@ -35,7 +41,6 @@ The generated output is [technical-profile.md](./technical-profile.md).
 
 ## Not run
 
-- The GitHub Actions workflow was added but not executed by a hosted runner.
-- Python 3.10 was not available for local verification; the CI matrix requests
-  Python 3.10 and 3.14.
-- No authenticated GitHub PR operation was possible in the current CLI session.
+- Python 3.10 was not available for local verification; its hosted CI job passed.
+- The PR was not created: GitHub CLI authentication is unavailable in this
+  session.

@@ -25,6 +25,8 @@ evidence, marks missing facts as `Not Found`, and does not publish to Confluence
 - Ran the CLI against the supplied public repository; it generated
   `docs/technical-profile.md` with missing language and manifest facts shown as
   `Not Found`.
+- GitHub Actions matrix — **Python 3.10 and 3.14 jobs passed** on the pushed
+  feature branch.
 
 ## Known Limitations
 
@@ -35,7 +37,6 @@ evidence, marks missing facts as `Not Found`, and does not publish to Confluence
 - Only `package.json`, `requirements.txt`, and `pom.xml` are analyzed.
 - Secret detection filters common credential/token patterns but cannot identify
   every arbitrary secret string.
-- The hosted GitHub Actions workflow has not yet run.
 
 ## Reviewer Checklist
 
