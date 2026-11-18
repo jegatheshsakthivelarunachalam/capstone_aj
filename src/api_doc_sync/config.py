@@ -177,7 +177,11 @@ def _validate_absolute_url(value: str, field_name: str) -> str:
 
 def _validate_output_path(value: str) -> str:
     candidate = Path(value)
-    if candidate.is_absolute():
+    if (
+        candidate.is_absolute()
+        or re.match(r"^[A-Za-z]:[\\/]", value)
+        or value.startswith("\\\\")
+    ):
         raise ConfigurationError("output_path must be a repository-relative path.")
     normalized = candidate.as_posix()
     if normalized in {"", "."} or ".." in candidate.parts:
