@@ -76,6 +76,7 @@ def run(
             drift = None
 
         patch_path = temp / "docs-api.patch"
+
         if baseline_markdown is None:
             write_patch_text(str(patch_path), candidate)
         else:
@@ -91,8 +92,17 @@ def run(
             "missing_baseline": baseline_markdown is None,
             "changed_facts": list(drift.changed_facts) if drift else [],
             "missing_facts": list(drift.missing_facts) if drift else [],
-            "path_count": drift.path_count if drift else len(model.to_dict()["paths"]),
-            "schema_count": drift.schema_count if drift else len(model.to_dict()["schemas"]),
+            "changes": getattr(drift, "changes", {}) if drift else {},
+            "path_count": (
+                drift.path_count
+                if drift
+                else len(model.to_dict()["paths"])
+            ),
+            "schema_count": (
+                drift.schema_count
+                if drift
+                else len(model.to_dict()["schemas"])
+            ),
             "patch_path": str(patch_path),
         }
 
