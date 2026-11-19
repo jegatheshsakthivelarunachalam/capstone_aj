@@ -29,6 +29,35 @@ class GitHubReportTests(unittest.TestCase):
         self.assertIn("+++ b/docs/api.md", diff.text)
         self.assertNotIn("report-secret", diff.text)
 
+    def test_comment_includes_detailed_changes(self):
+        drift = DriftResult(
+            has_drift=True,
+            changed_facts=("paths", "operations", "schemas"),
+            missing_facts=(),
+            path_count=2,
+            schema_count=1,
+            changes={
+                "added_paths": ["/patients"],
+                "added_operations": ["GET /patients"],
+                "added_schemas": ["Patient"],
+                "added_schema_fields": {
+                    "Patient": ["email", "patient_id"],
+                },
+            },
+        )
+
+        report = build_github_report(
+            drift,
+            "# API\n",
+            "# API changed\n",
+        )
+
+        self.assertIn("Added path: /patients", report.comment)
+        self.assertIn("Added operation: GET /patients", report.comment)
+        self.assertIn("Added schema: Patient", report.comment)
+        self.assertIn("Added schema field: `Patient.email`", report.comment)
+        self.assertIn("Added schema field: `Patient.patient_id`", report.comment)
+
     def test_builds_comment_with_counts_and_links(self):
         drift = DriftResult(
             has_drift=True,

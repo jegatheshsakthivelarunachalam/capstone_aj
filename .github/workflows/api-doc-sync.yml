@@ -12,6 +12,7 @@ on:
       - "pom.xml"
       - "requirements.txt"
       - "tests/integration/mock_app.py"
+      - ".github/workflows/api-doc-sync.yml"
 
 permissions:
   contents: read
@@ -159,24 +160,94 @@ jobs:
             const marker = "<!-- api-doc-sync-drift -->";
 
             const statusTitle = reportInvalid
-            ? "## API documentation check failed"
-            : report.missing_baseline
-            ? "## API documentation baseline missing"
-            : report.has_drift
-            ? "## API documentation drift detected"
-            : "## API documentation is up to date";
+              ? "## API documentation check failed"
+              : report.missing_baseline
+              ? "## API documentation baseline missing"
+              : report.has_drift
+              ? "## API documentation drift detected"
+              : "## API documentation is up to date";
+
+            const changes =
+              report.changes && typeof report.changes === "object"
+                ? report.changes
+                : {};
+
+            // Keep untrusted API identifiers inside inline code.
+            const inline = value =>
+              "`" + String(value).replace(/[\r\n]/g, " ").replace(/`/g, "ˋ") + "`";
+
+            const details = [];
+            const maxDetails = 100;
+            const maxValuesPerLine = 20;
+
+            const appendList = (label, key) => {
+              const values = Array.isArray(changes[key]) ? changes[key] : [];
+              if (values.length === 0) return;
+
+              const shown = values.slice(0, maxValuesPerLine).map(inline);
+              const remaining = values.length - shown.length;
+              const suffix = remaining > 0 ? ` (+${remaining} more)` : "";
+
+              details.push(`- ${label}: ${shown.join(", ")}${suffix}`);
+            };
+
+            const appendGrouped = (label, key) => {
+              const groups =
+                changes[key] && typeof changes[key] === "object"
+                  ? changes[key]
+                  : {};
+
+              for (const [schema, fields] of Object.entries(groups)) {
+                if (!Array.isArray(fields) || fields.length === 0) continue;
+
+                const shown = fields.slice(0, maxValuesPerLine).map(inline);
+                const remaining = fields.length - shown.length;
+                const suffix = remaining > 0 ? ` (+${remaining} more)` : "";
+
+                details.push(
+                  `- ${label} (${inline(schema)}): ${shown.join(", ")}${suffix}`
+                );
+              }
+            };
+
+            appendList("Added paths", "added_paths");
+            appendList("Removed paths", "removed_paths");
+            appendList("Modified paths", "modified_paths");
+
+            appendList("Added operations", "added_operations");
+            appendList("Removed operations", "removed_operations");
+            appendList("Modified operations", "modified_operations");
+
+            appendList("Added schemas", "added_schemas");
+            appendList("Removed schemas", "removed_schemas");
+            appendList("Modified schemas", "modified_schemas");
+
+            appendGrouped("Added fields", "added_schema_fields");
+            appendGrouped("Removed fields", "removed_schema_fields");
+            appendGrouped("Modified fields", "modified_schema_fields");
+
+            const displayedDetails = details.slice(0, maxDetails);
+            if (details.length > maxDetails) {
+              displayedDetails.push(
+                `- ${details.length - maxDetails} additional change entries omitted; see the report artifact.`
+              );
+            }
 
             const body = [
-            marker,
-            statusTitle,
-            `- Changed fact groups: ${report.changed_facts.length}`,
-            `- Paths: ${report.path_count}`,
-            `- Schemas: ${report.schema_count}`,
-            `- Missing facts: ${report.missing_facts.length}`,
-            `[Workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
+              marker,
+              statusTitle,
+              `- Changed fact groups: ${report.changed_facts.length}`,
+              `- Paths: ${report.path_count}`,
+              `- Schemas: ${report.schema_count}`,
+              `- Missing facts: ${report.missing_facts.length}`,
+              ...(displayedDetails.length > 0
+                ? ["", "### Detected changes", ...displayedDetails]
+                : []),
+              `[Workflow run](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId})`
             ];
+
             if (artifactUrl) {
-            body.push(`[Suggested patch](${artifactUrl})`);
+              body.push(`[Suggested patch](${artifactUrl})`);
             }
 
             const bodyText = body.join("\n");
@@ -188,6 +259,7 @@ jobs:
             const existing = comments.find(
               comment => comment.body && comment.body.includes(marker)
             );
+
             if (existing) {
               await github.rest.issues.updateComment({
                 owner,
@@ -203,3 +275,5 @@ jobs:
                 body: bodyText
               });
             }
+
+            

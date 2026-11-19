@@ -45,6 +45,32 @@ def build_unified_diff(
     return UnifiedDiff(text=diff, has_changes=bool(diff))
 
 
+def _append_change_lines(
+    lines: list[str],
+    label: str,
+    values: object,
+) -> None:
+    if isinstance(values, list):
+        for value in values:
+            lines.append(f"- {label}: {value}")
+
+
+def _append_schema_field_lines(
+    lines: list[str],
+    label: str,
+    values: object,
+) -> None:
+    if not isinstance(values, dict):
+        return
+
+    for schema_name, fields in sorted(values.items()):
+        if isinstance(fields, list):
+            for field_name in fields:
+                lines.append(
+                    f"- {label}: `{schema_name}.{field_name}`"
+                )
+
+
 def build_pr_comment(
     drift: DriftResult,
     *,
@@ -65,8 +91,49 @@ def build_pr_comment(
         f"- Schemas: {drift.schema_count}",
         f"- Missing facts: {len(drift.missing_facts)}",
     ]
+
+    changes = getattr(drift, "changes", {}) or {}
+
+    _append_change_lines(lines, "Added path", changes.get("added_paths"))
+    _append_change_lines(lines, "Removed path", changes.get("removed_paths"))
+    _append_change_lines(lines, "Modified path", changes.get("modified_paths"))
+
+    _append_change_lines(
+        lines, "Added operation", changes.get("added_operations")
+    )
+    _append_change_lines(
+        lines, "Removed operation", changes.get("removed_operations")
+    )
+    _append_change_lines(
+        lines, "Modified operation", changes.get("modified_operations")
+    )
+
+    _append_change_lines(lines, "Added schema", changes.get("added_schemas"))
+    _append_change_lines(lines, "Removed schema", changes.get("removed_schemas"))
+    _append_change_lines(
+        lines, "Modified schema", changes.get("modified_schemas")
+    )
+
+    _append_schema_field_lines(
+        lines, "Added schema field", changes.get("added_schema_fields")
+    )
+    _append_schema_field_lines(
+        lines, "Removed schema field", changes.get("removed_schema_fields")
+    )
+    _append_schema_field_lines(
+        lines, "Modified schema field", changes.get("modified_schema_fields")
+    )
+
+    if drift.missing_facts:
+        lines.append("")
+        lines.append("### Validation warnings")
+        for fact in drift.missing_facts:
+            lines.append(f"- {fact}")
+
     if links:
-        lines.append("- " + " | ".join(links))
+        lines.append("")
+        lines.append(" | ".join(links))
+
     return "\n".join(lines)
 
 
