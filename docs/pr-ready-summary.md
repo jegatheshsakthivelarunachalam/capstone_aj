@@ -1,52 +1,61 @@
-# Pull Request Ready Summary
+﻿# Pull Request Summary â€” API Documentation Sync
 
 ## Summary
 
-Adds an API Documentation Sync pipeline that starts a configured application,
-reads a live OpenAPI document, generates candidate `docs/api.md`, and detects
-semantic drift for pull requests. The implementation preserves the existing
-Technical Profile package and uses read-only build and isolated reporting
-permissions.
+Implements an automated API Documentation Sync pipeline that starts a configured application, retrieves its live OpenAPI specification, generates Markdown documentation, and detects semantic drift against the committed baseline.
+
+The implementation preserves the existing Technical Profile Generator and provides detailed pull-request drift reporting.
 
 ## Changes Made
 
-- Add API synchronization CLI, lifecycle, configuration, authentication,
-  OpenAPI extraction, Markdown, drift, reporting, and security modules.
-- Add HTML metadata-based semantic baseline handling and unified diffs.
-- Add `.github/doc-sync.yml` and the pull-request GitHub Actions workflow.
-- Add unit, security, workflow, and mock integration tests.
-- Add API usage, verification, and handoff documentation.
+- Added API synchronization CLI, application lifecycle management, configuration, authentication, and OpenAPI extraction.
+- Added Markdown generation and semantic comparison of paths, operations, schemas, and schema fields.
+- Added sanitized JSON reports and unified-diff patch generation.
+- Added GitHub Actions pull-request build and reporting jobs.
+- Added mock application integration and security tests.
+- Added Copilot instructions, agents, prompts, and skills for both projects.
+- Updated project documentation and verification evidence.
 
 ## Test Evidence
 
+Full local test suite:
+
 ```powershell
 python -m unittest discover -s tests -v
-python -m compileall -q src tests
-git diff --check
-python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/api-doc-sync.yml').read_text(encoding='utf-8')); yaml.safe_load(pathlib.Path('.github/doc-sync.yml').read_text(encoding='utf-8')); print('workflow/config YAML: valid')"
 ```
 
-Actual final evidence:
+Recorded result: **150 tests passed.**
 
-- Complete suite: 145 tests passed.
-- Remediation/security focused suite: 47 tests passed.
-- Compilation: passed.
-- Diff check: passed.
-- Workflow/config safe YAML loading: passed.
+Additional recorded checks:
+
+- `python -m compileall -q src tests` â€” passed.
+- `git diff --check` â€” passed during previous implementation verification.
+- Workflow and configuration YAML validation â€” passed.
+
+## Hosted Demonstration
+
+[PR #4 â€” Demo: Detect API documentation drift](https://github.com/jegatheshsakthivelarunachalam/capstone_aj/pull/4)
+
+- Documentation build failed as expected because the demonstration introduces intentional API drift.
+- Drift reporting job succeeded.
+- Detailed PR comment identified `GET /patients` and the added `Patient` schema fields.
+
+**PR #4 is a demonstration PR. Do not merge it as-is**, because it intentionally introduces drift.
 
 ## Known Limitations
 
-- OAuth2/OIDC provider-specific values remain repository configuration.
-- Fork PR workflows cannot receive repository secrets or guarantee comments.
-- The workflow reports drift and uploads patches; it does not commit generated
-  documentation.
-- Hosted GitHub Actions evidence must be recorded after a hosted run.
+- The PR-visible workflow is not a fully trusted security boundary. A PR author can modify workflow steps. A protected default-branch workflow or equivalent protected reusable workflow is needed for stronger enforcement.
+- Fork pull requests cannot access repository secrets and may not permit PR comments.
+- Generated documentation is not automatically committed or pushed.
+- Python 3.10 was not available for local testing; consult hosted CI evidence for that version.
 
 ## Reviewer Checklist
 
 - [ ] Requirements and architecture traceability reviewed.
-- [ ] Credentials excluded from logs, diffs, Markdown, metadata, and reports.
-- [ ] Read-only build and conditional reporting permissions verified.
-- [ ] All approved authentication modes reviewed.
-- [ ] JSON/YAML, `$ref`, limits, missing baseline, and drift behavior verified.
-- [ ] Unit and mock integration tests pass.
+- [ ] API extraction and semantic drift behavior reviewed.
+- [ ] Secret redaction and authentication handling reviewed.
+- [ ] OpenAPI `$ref` restrictions and resource limits reviewed.
+- [ ] GitHub Actions permissions and trust-boundary limitation understood.
+- [ ] Local test and hosted workflow evidence reviewed.
+- [ ] Existing Technical Profile functionality preserved.
+- [ ] Unresolved security limitations accepted or addressed before production enforcement.
